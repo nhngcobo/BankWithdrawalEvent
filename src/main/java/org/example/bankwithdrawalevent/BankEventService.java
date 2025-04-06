@@ -1,15 +1,15 @@
 package org.example.bankwithdrawalevent;
-
-
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sns.model.MessageAttributeValue;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-
 import software.amazon.awssdk.services.sns.model.PublishRequest;
 import software.amazon.awssdk.services.sns.model.PublishResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -22,6 +22,8 @@ import java.util.Map;
 public class BankEventService {
 
     private final JdbcTemplate jdbcTemplate;
+    private static final Logger logger = LoggerFactory.getLogger(BankEventService.class);
+
 
     @Autowired
     public BankEventService(JdbcTemplate jdbcTemplate) {
@@ -34,37 +36,58 @@ public class BankEventService {
             return jdbcTemplate.queryForObject(sql, new Object[]{accountId}, BigDecimal.class);
 
         } catch (Exception e) {
-            System.out.println("Account may not exist: " + e.getMessage());
+            logger.error("Failed to fetch account balance for account {}: {}", accountId, e.getMessage());
             return null;
         }
     }
 
     public String withdraw(Long accountId, BigDecimal amount) {
+        // Input validation
+        WithdrawalEvent event = new WithdrawalEvent(amount, accountId, "Pending");
+
+        if (accountId == null || amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            logger.error("INVALID_INPUT {}: {}", amount, accountId);
+            event.setStatus("Failed");
+            return event.toJson();
+        }
+
         // Check current balance
         BigDecimal currentBalance = fetchAccountBalance(accountId);
+
         if (currentBalance != null && currentBalance.compareTo(amount) >= 0) {
-            // Update balance
             String sql = "UPDATE accounts SET balance = balance - ? WHERE accountId = ?";
-            int rowsAffected = jdbcTemplate.update(sql, amount, accountId);
-            if (rowsAffected > 0) {
-                String smsText = "You have successfully withdrawn R" + amount + " from your account ";
-                pushNotification(smsText);
-                return "Success";
-            } else {
-                // In case the update fails for reasons other than a balance check
-                return "Failed";
+            try {
+                int rowsAffected = jdbcTemplate.update(sql, amount, accountId);
+                if (rowsAffected > 0) {
+                    event.setStatus("Success");
+                    String smsText = "You have successfully withdrawn R" + event.getAmount() + " from your account";
+                    pushNotification(smsText);
+                    return "Success";
+                } else {
+                    event.setStatus("Failed");
+                    logger.warn("Update query executed but no rows affected for account {}", event.toJson());
+                    return "Failed";
+                }
+            } catch (Exception e) {
+                event.setStatus("Failed");
+                logger.error("Database error during withdrawal for account {}: {}", event.toJson(), e.getMessage());
+                return "An error occurred while processing the withdrawal.";
             }
-        } else {
+        }
+        else {
             // Insufficient funds, optional notification
-            String smsText = "You have do not have enough money to withdraw R" + amount + " from your account";
+            event.setStatus("Failed");
+            String smsText = "You have do not have enough money to withdraw R" + event.getAmount() + " from your account";
             pushNotification(smsText);
-            return "Insufficient funds for withdrawal";
+
+            logger.error("You have do not have enough funds to withdraw {}: {}", event.getAmount(), event.getStatus());
+
+            return smsText;
         }
     }
 
     public void pushNotification(String smsText) {
-        //Only Open connection when to AWS when you want to send the notification.
-
+        //Only Open connection  to AWS when you want to send a notification.
         AwsBasicCredentials awsCreds = AwsBasicCredentials.create(
                 "",
                 ""
@@ -91,10 +114,10 @@ public class BankEventService {
 
         try {
             PublishResponse response = snsClient.publish(request);
-            System.out.println("SMS sent! Message ID: " + response.messageId());
+            logger.info("SMS sent! Message ID:  {}", response.messageId());
         } catch (Exception e) {
-            System.err.println("Error sending SMS: " + e.getMessage());
+            logger.error("Error sending SMS: {}", e.getMessage());
         }
-        snsClient.close();
+        snsClient.close();   //close connection
     }
 }
