@@ -26,7 +26,7 @@ import java.util.Map;
 public class BankEventService {
 
     private final JdbcTemplate jdbcTemplate;
-    private static final Logger logger = LoggerFactory.getLogger(BankEventService.class);
+    private final Logger logger = LoggerFactory.getLogger(BankEventService.class);
 
 
     @Autowired
@@ -55,7 +55,7 @@ public class BankEventService {
      * */
 
     public String withdraw(Long accountId, BigDecimal amount) {
-        WithdrawalEvent event = new WithdrawalEvent(amount, accountId, StatusConstants.PENDING);
+        WithdrawalEvent event = new WithdrawalEvent(amount,  String.valueOf(accountId), StatusConstants.PENDING);
 
         // Input validation, if request is invalid return an error object
         if (accountId == null || amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -70,7 +70,7 @@ public class BankEventService {
         if (currentBalance == null) {
             event.setStatus(StatusConstants.FAILED);
             String smsText = String.format("There was a problem withdrawing from your accountId: %s", event.getAccountId());
-            //pushNotification(smsText);
+            //pushNotification(smsText);     /** Optional send SMS*/
             logger.warn("There was a problem withdrawing from account {}", event.getAccountId());
             return smsText;
         }
@@ -97,7 +97,7 @@ public class BankEventService {
         } else {
             event.setStatus(StatusConstants.FAILED);
             String smsText = String.format("You do not have enough money to withdraw R%s from your account", event.getAmount());
-            //pushNotification(smsText);
+            //pushNotification(smsText);   /** Optional send SMS*/
             logger.warn("Insufficient funds to withdraw {}: {}", event.getAmount(), event.getStatus());
             return smsText;
         }

@@ -37,6 +37,11 @@ public class BankAccountController {
 
     @PostMapping("/withdraw")
     public String withdraw(@RequestBody WithdrawalEvent request) {
-        return bankEventService.withdraw(request.getAccountId(), request.getAmount());
+        try {
+            Long accountIdLong = Long.valueOf(request.getAccountId());  // Converts String to Long
+            return bankEventService.withdraw(accountIdLong, request.getAmount());
+        } catch (NumberFormatException e) {
+            return String.format("Invalid accountId: R%s must be numeric.", request.getAccountId());
+        }
     }
 }
