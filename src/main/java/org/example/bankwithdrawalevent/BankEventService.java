@@ -18,6 +18,10 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ *  BankEventService where the application logic is.
+ * */
+
 @Service
 public class BankEventService {
 
@@ -30,6 +34,10 @@ public class BankEventService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * Fetch account Balance function that checks the balance for a specific account/acountId
+     * */
+
     public BigDecimal fetchAccountBalance(Long accountId) {
         try {
             String sql = "SELECT balance FROM accounts WHERE accountId = ?";
@@ -41,50 +49,63 @@ public class BankEventService {
         }
     }
 
-    public String withdraw(Long accountId, BigDecimal amount) {
-        // Input validation
-        WithdrawalEvent event = new WithdrawalEvent(amount, accountId, "Pending");
 
+    /**
+     * Withdraw function that takes in an account and the amount requested for the withdrawal, also makes use of the check balance function
+     * */
+
+    public String withdraw(Long accountId, BigDecimal amount) {
+        WithdrawalEvent event = new WithdrawalEvent(amount, accountId, StatusConstants.PENDING);
+
+        // Input validation, if request is invalid return an error object
         if (accountId == null || amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             logger.error("INVALID_INPUT {}: {}", amount, accountId);
-            event.setStatus("Failed");
+            event.setStatus(StatusConstants.FAILED);
             return event.toJson();
         }
 
         // Check current balance
         BigDecimal currentBalance = fetchAccountBalance(accountId);
 
-        if (currentBalance != null && currentBalance.compareTo(amount) >= 0) {
+        if (currentBalance == null) {
+            event.setStatus(StatusConstants.FAILED);
+            String smsText = String.format("There was a problem withdrawing from your accountId: %s", event.getAccountId());
+            //pushNotification(smsText);
+            logger.warn("There was a problem withdrawing from account {}", event.getAccountId());
+            return smsText;
+        }
+
+        if (currentBalance.compareTo(amount) >= 0) {
             String sql = "UPDATE accounts SET balance = balance - ? WHERE accountId = ?";
             try {
                 int rowsAffected = jdbcTemplate.update(sql, amount, accountId);
                 if (rowsAffected > 0) {
-                    event.setStatus("Success");
-                    String smsText = "You have successfully withdrawn R" + event.getAmount() + " from your account";
+                    event.setStatus(StatusConstants.SUCCESS);
+                    String smsText = String.format("You have successfully withdrawn R%s from your account", event.getAmount());
                     pushNotification(smsText);
-                    return "Success";
+                    return smsText;
                 } else {
-                    event.setStatus("Failed");
+                    event.setStatus(StatusConstants.FAILED);
                     logger.warn("Update query executed but no rows affected for account {}", event.toJson());
-                    return "Failed";
+                    return event.toJson();
                 }
             } catch (Exception e) {
-                event.setStatus("Failed");
+                event.setStatus(StatusConstants.FAILED);
                 logger.error("Database error during withdrawal for account {}: {}", event.toJson(), e.getMessage());
-                return "An error occurred while processing the withdrawal.";
+                return event.toJson();
             }
-        }
-        else {
-            // Insufficient funds, optional notification
-            event.setStatus("Failed");
-            String smsText = "You have do not have enough money to withdraw R" + event.getAmount() + " from your account";
-            pushNotification(smsText);
-
-            logger.error("You have do not have enough funds to withdraw {}: {}", event.getAmount(), event.getStatus());
-
+        } else {
+            event.setStatus(StatusConstants.FAILED);
+            String smsText = String.format("You do not have enough money to withdraw R%s from your account", event.getAmount());
+            //pushNotification(smsText);
+            logger.warn("Insufficient funds to withdraw {}: {}", event.getAmount(), event.getStatus());
             return smsText;
         }
     }
+
+    /**
+     * Push notification sends the SMS update of a transaction to your mobile number.
+     * */
 
     public void pushNotification(String smsText) {
         //Only Open connection  to AWS when you want to send a notification.
@@ -98,7 +119,7 @@ public class BankEventService {
                 .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
                 .build();
 
-        //Set SMS attributes (Transactional is for OTPs / alerts)
+        //Set SMS attributes
         Map<String, MessageAttributeValue> smsAttributes = new HashMap<>();
         smsAttributes.put("AWS.SNS.SMS.SMSType", MessageAttributeValue.builder()
                 .stringValue("Transactional")
@@ -118,6 +139,6 @@ public class BankEventService {
         } catch (Exception e) {
             logger.error("Error sending SMS: {}", e.getMessage());
         }
-        snsClient.close();   //close connection
+        snsClient.close();   // Close AWS connection
     }
 }
