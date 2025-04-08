@@ -17,6 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  *  BankEventService where the application logic is.
@@ -45,7 +46,7 @@ public class BankEventService {
 
         } catch (Exception e) {
             logger.error("Failed to fetch account balance for account {}: {}", accountId, e.getMessage());
-            return null;
+            return new BigDecimal(StatusConstants.NO_ACCOUNT);
         }
     }
 
@@ -55,24 +56,27 @@ public class BankEventService {
      * */
 
     public String withdraw(Long accountId, BigDecimal amount) {
-        WithdrawalEvent event = new WithdrawalEvent(amount,  String.valueOf(accountId), StatusConstants.PENDING);
+        WithdrawalEvent event = new WithdrawalEvent(amount, String.valueOf(accountId), StatusConstants.PENDING);
 
-        // Input validation, if request is invalid return an error object
+        // Input validation
         if (accountId == null || amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             logger.error("INVALID_INPUT {}: {}", amount, accountId);
             event.setStatus(StatusConstants.FAILED);
-            return event.toJson();
+            return handleFailure(
+                    event,
+                    "Invalid request body",
+                    "Invalid request body"
+            );
         }
 
-        // Check current balance
         BigDecimal currentBalance = fetchAccountBalance(accountId);
 
-        if (currentBalance == null) {
-            event.setStatus(StatusConstants.FAILED);
-            String smsText = String.format("There was a problem withdrawing from your accountId: %s", event.getAccountId());
-            //pushNotification(smsText);     /** Optional send SMS*/
-            logger.warn("There was a problem withdrawing from account {}", event.getAccountId());
-            return smsText;
+        if (Objects.equals(currentBalance, new BigDecimal(StatusConstants.NO_ACCOUNT))) {
+            return handleFailure(
+                    event,
+                    "There was a problem withdrawing from account {}",
+                    String.format("There was a problem withdrawing from your accountId: %s", event.getAccountId())
+            );
         }
 
         if (currentBalance.compareTo(amount) >= 0) {
@@ -85,22 +89,37 @@ public class BankEventService {
                     pushNotification(smsText);
                     return smsText;
                 } else {
-                    event.setStatus(StatusConstants.FAILED);
-                    logger.warn("Update query executed but no rows affected for account {}", event.toJson());
-                    return event.toJson();
+                    return handleFailure(
+                            event,
+                            "Update query executed but no rows affected for account: ",
+                            String.format("Update query executed but no rows affected for account: R%s", event.getAccountId())
+                    );
                 }
             } catch (Exception e) {
                 event.setStatus(StatusConstants.FAILED);
-                logger.error("Database error during withdrawal for account {}: {}", event.toJson(), e.getMessage());
-                return event.toJson();
+                return handleFailure(
+                        event,
+                        "Database error during withdrawal for account. ",
+                        String.format("Database error during withdrawal for account: R%s", event.getAccountId())
+                );
             }
         } else {
-            event.setStatus(StatusConstants.FAILED);
-            String smsText = String.format("You do not have enough money to withdraw R%s from your account", event.getAmount());
-            //pushNotification(smsText);   /** Optional send SMS*/
-            logger.warn("Insufficient funds to withdraw {}: {}", event.getAmount(), event.getStatus());
-            return smsText;
+            return handleFailure(
+                    event,
+                    "Insufficient funds to withdraw {}: {}",
+                    String.format("You do not have enough money to withdraw R%s from your account", event.getAmount())
+            );
         }
+    }
+
+    /**
+     * This is a helper method that we use to log errors with the withdrawal process
+     * We used a helper because we needed to handle multiple FAILURE scenarios
+     * */
+    private String handleFailure(WithdrawalEvent event, String logMessage, String smsText) {
+        event.setStatus(StatusConstants.FAILED);
+        logger.warn(logMessage, event.getAccountId());
+        return smsText != null ? smsText : event.toJson();
     }
 
     /**
