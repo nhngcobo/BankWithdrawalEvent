@@ -3,6 +3,7 @@
 A Spring Boot application that handles basic banking operations, specifically checking account balances and performing withdrawals. The application integrates with AWS SNS to send SMS notifications for successful transactions.
 
 ---
+> 📝 **Note**: I chose to complete this in **Spring Boot** because the sample code provided looked structurally similar to C# .NET (which I'm more familiar with), so I thought it’d be a good opportunity to try it out!
 
 ## Features
 
