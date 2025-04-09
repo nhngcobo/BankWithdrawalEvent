@@ -77,7 +77,14 @@ Response:
 SMSText:
 ```
 ![IMG_8749](https://github.com/user-attachments/assets/6fd2fd89-7c7f-47d3-b75f-7b5f485bc448)
-
+``` 
+Insufficient Funds:
+```
+![img.png](img.png)
+```
+Invalid Account:
+```
+![img_1.png](img_1.png)
 
 
 
