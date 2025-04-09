@@ -67,15 +67,17 @@ Handled globally using `@ControllerAdvice`:
 **Success Withdrawal**
 ```
 Request from Postman:
+```
 ![image](https://github.com/user-attachments/assets/854f94d5-4c77-4385-b485-d042d478d10e)
-
+```
 Response:
+```
 ![image](https://github.com/user-attachments/assets/8517d810-b9b5-416e-817a-cbeb6c66ba14)
-
+```
 SMSText:
+```
 ![IMG_8749](https://github.com/user-attachments/assets/6fd2fd89-7c7f-47d3-b75f-7b5f485bc448)
 
-```
 
 
 
