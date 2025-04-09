@@ -17,7 +17,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  *  BankEventService where the application logic is.
@@ -43,10 +42,9 @@ public class BankEventService {
         try {
             String sql = "SELECT balance FROM accounts WHERE accountId = ?";
             return jdbcTemplate.queryForObject(sql, new Object[]{accountId}, BigDecimal.class);
-
         } catch (Exception e) {
-            logger.error("Failed to fetch account balance for account {}: {}", accountId, e.getMessage());
-            return new BigDecimal(StatusConstants.NO_ACCOUNT);
+            logger.error("Account not found: {}", accountId);
+            throw new AccountNotFoundException("Account ID not found: " + accountId);
         }
     }
 
@@ -56,70 +54,35 @@ public class BankEventService {
      * */
 
     public String withdraw(Long accountId, BigDecimal amount) {
-        WithdrawalEvent event = new WithdrawalEvent(amount, String.valueOf(accountId), StatusConstants.PENDING);
+        WithdrawalEvent event = new WithdrawalEvent(amount,  String.valueOf(accountId), StatusConstants.PENDING);
 
-        // Input validation
         if (accountId == null || amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            logger.error("INVALID_INPUT {}: {}", amount, accountId);
             event.setStatus(StatusConstants.FAILED);
-            return handleFailure(
-                    event,
-                    "Invalid request body",
-                    "Invalid request body"
-            );
+            throw new InvalidRequestException(String.format("Invalid account ID or amount.\n%s", event.toJson()));
         }
 
         BigDecimal currentBalance = fetchAccountBalance(accountId);
 
-        if (Objects.equals(currentBalance, new BigDecimal(StatusConstants.NO_ACCOUNT))) {
-            return handleFailure(
-                    event,
-                    "There was a problem withdrawing from account {}",
-                    String.format("There was a problem withdrawing from your accountId: %s", event.getAccountId())
-            );
+        if (currentBalance.compareTo(amount) < 0) {
+            event.setStatus(StatusConstants.FAILED);
+            throw new InsufficientFundsException(String.format("Insufficient funds for withdrawal.\n%s", event.toJson()));
         }
 
-        if (currentBalance.compareTo(amount) >= 0) {
-            String sql = "UPDATE accounts SET balance = balance - ? WHERE accountId = ?";
-            try {
-                int rowsAffected = jdbcTemplate.update(sql, amount, accountId);
-                if (rowsAffected > 0) {
-                    event.setStatus(StatusConstants.SUCCESS);
-                    String smsText = String.format("You have successfully withdrawn R%s from your account", event.getAmount());
-                    pushNotification(smsText);
-                    return smsText;
-                } else {
-                    return handleFailure(
-                            event,
-                            "Update query executed but no rows affected for account: ",
-                            String.format("Update query executed but no rows affected for account: R%s", event.getAccountId())
-                    );
-                }
-            } catch (Exception e) {
-                event.setStatus(StatusConstants.FAILED);
-                return handleFailure(
-                        event,
-                        "Database error during withdrawal for account. ",
-                        String.format("Database error during withdrawal for account: R%s", event.getAccountId())
-                );
-            }
-        } else {
-            return handleFailure(
-                    event,
-                    "Insufficient funds to withdraw {}: {}",
-                    String.format("You do not have enough money to withdraw R%s from your account", event.getAmount())
-            );
-        }
-    }
+        String sql = "UPDATE accounts SET balance = balance - ? WHERE accountId = ?";
+        int rowsAffected = jdbcTemplate.update(sql, amount, accountId);
 
-    /**
-     * This is a helper method that we use to log errors with the withdrawal process
-     * We used a helper because we needed to handle multiple FAILURE scenarios
-     * */
-    private String handleFailure(WithdrawalEvent event, String logMessage, String smsText) {
-        event.setStatus(StatusConstants.FAILED);
-        logger.warn(logMessage, event.getAccountId());
-        return smsText != null ? smsText : event.toJson();
+        if (rowsAffected == 0) {
+            logger.warn("No rows updated during withdrawal for account {}", accountId);
+            throw new RuntimeException(String.format("Withdrawal failed, no rows updated during withdrawal for account.\n%s", event.toJson()));
+        }
+
+        event.setStatus(StatusConstants.SUCCESS);
+
+        // Send SMS notification
+        String smsText = String.format("You have successfully withdrawn R%s from your account", amount);
+        pushNotification(smsText);
+
+        return smsText +"\n"+event.toJson();
     }
 
     /**
