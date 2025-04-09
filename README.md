@@ -5,6 +5,35 @@ A Spring Boot application that handles basic banking operations, specifically ch
 ---
 > 📝 **Note**: I chose to complete this in **Spring Boot** because the sample code provided looked structurally similar to C# .NET (which I'm more familiar with), so I thought it’d be a good opportunity to try it out!
 
+## Structure
+```angular2html
+BankWithdrawalEvent
+│
+├── src
+│   ├── main
+│   │   ├── java
+│   │   │   └── org
+│   │   │       └── example
+│   │   │           └── bankwithdrawalevent
+│   │   │               ├── BankAccountController.java
+│   │   │               ├── BankEventService.java
+│   │   │               ├── GlobalExceptionHandler.java
+│   │   │               ├── StatusConstants.java
+│   │   │               ├── WithdrawalEvent.java
+│   │   │               ├── InsufficientFundsException.java
+│   │   │               ├── AccountNotFoundException.java
+│   │   │               ├── InvalidRequestException.java
+│   │   │               ├── ProcessingRequestFailed.java
+│   │   │               ├── BankWithdrawalEventApplication.java
+│   │   │
+│   │   ├── resources
+│   │   │   ├── application.properties
+│   │   │
+├── pom.xml (for Maven projects) or build.gradle (for Gradle projects)
+└── README.md
+
+```
+
 ## Features
 
 -  Check account balance by account ID
