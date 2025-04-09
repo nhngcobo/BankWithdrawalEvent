@@ -27,7 +27,8 @@ public class BankAccountController {
 
     @GetMapping("/balance")
     public BigDecimal getBalance(@RequestParam String accountId) {
-        Long accountIdLong = Long.parseLong(accountId); // Let Spring handle error if not parsable
+        //We do this to validate the accountId, ensure input like accountId = 123de4 triggers exception handling , NumberFormatException
+        Long accountIdLong = Long.parseLong(accountId);
         return bankEventService.fetchAccountBalance(accountIdLong);
     }
 

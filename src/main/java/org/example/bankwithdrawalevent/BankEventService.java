@@ -1,5 +1,7 @@
 package org.example.bankwithdrawalevent;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 
 import org.slf4j.Logger;
@@ -28,6 +30,18 @@ public class BankEventService {
     private final JdbcTemplate jdbcTemplate;
     private final Logger logger = LoggerFactory.getLogger(BankEventService.class);
 
+    /**
+     * Use @Value to inject values into these fields from the properties file/ key value maps. Instead of hardcoding the creds inside the service.
+     */
+
+    @Value("${aws.accessKey}")
+    private String accessKey;
+
+    @Value("${aws.secretKey}")
+    private String secretKey;
+
+    @Value("${aws.phoneNumber}")
+    private String phoneNumber;
 
     @Autowired
     public BankEventService(JdbcTemplate jdbcTemplate) {
@@ -36,15 +50,18 @@ public class BankEventService {
 
     /**
      * Fetch account Balance function that checks the balance for a specific account/acountId
-     * */
+     */
 
     public BigDecimal fetchAccountBalance(Long accountId) {
         try {
             String sql = "SELECT balance FROM accounts WHERE accountId = ?";
             return jdbcTemplate.queryForObject(sql, new Object[]{accountId}, BigDecimal.class);
-        } catch (Exception e) {
-            logger.error("Account not found: {}", accountId);
+        } catch (EmptyResultDataAccessException e) {
+            // If no row found for the given accountId.
             throw new AccountNotFoundException("Account ID not found: " + accountId);
+        } catch (Exception e) {
+            // If for some reason we still fail to GET the account balance then we throw 'a' general exception.
+            throw new ProcessingRequestFailed("Something went wrong with processing your request." + accountId);
         }
     }
 
@@ -92,8 +109,8 @@ public class BankEventService {
     public void pushNotification(String smsText) {
         //Only Open connection  to AWS when you want to send a notification.
         AwsBasicCredentials awsCreds = AwsBasicCredentials.create(
-                "",
-                ""
+                accessKey,
+                secretKey
         );
 
         SnsClient snsClient = SnsClient.builder()
@@ -111,13 +128,12 @@ public class BankEventService {
         // Construct SMS request
         PublishRequest request = PublishRequest.builder()
                 .message(smsText)
-                .phoneNumber("")
+                .phoneNumber(phoneNumber)
                 .messageAttributes(smsAttributes)
                 .build();
 
         try {
             PublishResponse response = snsClient.publish(request);
-            logger.info("SMS sent! Message ID:  {}", response.messageId());
         } catch (Exception e) {
             logger.error("Error sending SMS: {}", e.getMessage());
         }
