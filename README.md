@@ -29,7 +29,7 @@ BankWithdrawalEvent
 │   │   ├── resources
 │   │   │   ├── application.properties
 │   │   │
-├── pom.xml (for Maven projects) or build.gradle (for Gradle projects)
+├── pom.xml (Maven projects)
 └── README.md
 
 ```
