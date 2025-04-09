@@ -13,7 +13,6 @@ import software.amazon.awssdk.services.sns.model.MessageAttributeValue;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.services.sns.model.PublishRequest;
-import software.amazon.awssdk.services.sns.model.PublishResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
@@ -133,7 +132,7 @@ public class BankEventService {
                 .build();
 
         try {
-            PublishResponse response = snsClient.publish(request);
+            snsClient.publish(request);
         } catch (Exception e) {
             logger.error("Error sending SMS: {}", e.getMessage());
         }
